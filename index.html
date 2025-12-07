@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Golden Indexed</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding:wght@700&family=Noto+Sans+KR:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        /* 기본 설정 */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            min-height: 100vh;
+            width: 100vw;
+            font-family: 'Nanum Gothic Coding', 'Noto Sans KR', monospace;
+            font-weight: 700;
+            overflow: hidden; /* 스크롤 방지 */
+            user-select: none; /* 드래그 시 텍스트 선택 방지 */
+        }
+
+        /* 1. 배경 아트워크 (z-index 0) */
+        #canvas-container {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; pointer-events: none;
+        }
+        .art-shape {
+            stroke: rgba(255, 255, 255, 0.5); 
+            stroke-width: 1px;
+            fill: none;
+            will-change: transform;
+        }
+
+        /* 2. NASA 이미지 레이어 (z-index 20: 드래그 최우선 순위) */
+        #nasa-image-layer {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 20; 
+            pointer-events: none; /* 레이어 자체는 클릭 통과 */
+        }
+
+        /* 이미지 스타일 */
+        .nasa-popup-img {
+            position: absolute;
+            width: 7.5vw;  /* 크기 1/2 축소 유지 */
+            max-height: 15vh;
+            object-fit: contain;
+            opacity: 0;
+            
+            /* 드래그 가능하도록 설정 */
+            pointer-events: auto; 
+            cursor: grab;
+            
+            /* 스타일 */
+            filter: grayscale(40%) contrast(1.2) brightness(0.8);
+            box-shadow: 0 0 15px rgba(74, 101, 235, 0.2); 
+            
+            /* 애니메이션: 등장(스캔) + 부유 */
+            animation: 
+                scanEffect 1.5s cubic-bezier(0.1, 0.9, 0.2, 1) forwards,
+                floatSpace 6s ease-in-out infinite alternate;
+            
+            /* 드래그 시 부드러운 이동 끄기 (반응성 향상) */
+            transition: opacity 1s ease-in-out;
+        }
+
+        .nasa-popup-img:active {
+            cursor: grabbing;
+            filter: brightness(1.3) contrast(1.3) drop-shadow(0 0 10px white); /* 잡았을 때 빛남 */
+            animation: none; /* 잡으면 움직임 멈춤 */
+            z-index: 1000; /* 잡은 이미지를 최상단으로 */
+        }
+
+        /* 스캔 등장 효과 */
+        @keyframes scanEffect {
+            0% {
+                opacity: 0;
+                clip-path: inset(100% 0 0 0); 
+                transform: translateY(30px) scale(0.9);
+                filter: brightness(2) contrast(2) hue-rotate(90deg);
+            }
+            10% { opacity: 1; clip-path: inset(80% 0 0 0); }
+            20% { clip-path: inset(40% 0 20% 0); filter: brightness(1.5) hue-rotate(-45deg); }
+            40% { clip-path: inset(20% 0 0 0); transform: translateY(10px) scale(0.95); }
+            60% { filter: brightness(1.2) sepia(1); }
+            100% {
+                opacity: 0.8;
+                clip-path: inset(0 0 0 0);
+                transform: translateY(0) scale(1);
+                filter: grayscale(20%) contrast(1.1);
+            }
+        }
+
+        @keyframes floatSpace {
+            0% { margin-top: 0px; margin-left: 0px; }
+            100% { margin-top: -20px; margin-left: 10px; }
+        }
+
+        /* 사라질 때 클래스 */
+        .fade-out {
+            opacity: 0 !important;
+            transform: scale(0.8) translateY(-20px) !important;
+            filter: blur(10px) !important;
+            transition: opacity 1s ease-out, transform 1s ease-in;
+            pointer-events: none;
+        }
+
+        /* 빨려들어갈 때 클래스 */
+        .sucked-in {
+            transition: all 0.5s cubic-bezier(0.5, 0, 1, 1) !important;
+            opacity: 0 !important;
+            transform: scale(0) rotate(720deg) !important; /* 회전하며 빨려들어감 */
+            filter: brightness(2) !important;
+        }
+
+
+        /* 3. 오디오 비주얼라이저 (z-index 5) */
+        #visualizer-layer {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 5; 
+            pointer-events: none; 
+            display: flex; align-items: center; justify-content: center;
+        }
+        canvas#oscilloscope { width: 100%; height: 100%; }
+
+        /* 시작 버튼 */
+        #startBtn {
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 30; 
+            padding: 15px 30px;
+            font-family: 'Nanum Gothic Coding', monospace;
+            font-size: 16px; font-weight: bold;
+            color: #4a65eb; background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #4a65eb; border-radius: 50px;
+            cursor: pointer; transition: all 0.3s;
+        }
+        #startBtn:hover { background-color: #4a65eb; color: white; }
+
+        /* 4. 메시지 로그 (z-index 15) */
+        #content-layer {
+            position: relative; z-index: 15; 
+            width: 100%; min-height: 100vh;
+            box-sizing: border-box; padding: 40px;
+            display: flex; flex-direction: column; justify-content: flex-end;
+            pointer-events: none; 
+        }
+        #messageLog, #input-wrapper { pointer-events: auto; }
+        #messageLog { width: 100%; display: flex; flex-direction: column; justify-content: flex-end; margin-bottom: 30px; }
+        .message-entry { display: flex; flex-direction: row; margin-bottom: 20px; font-size: 16px; line-height: 1.6; color: #FFFFF0; }
+        .binary-date { font-family: 'Nanum Gothic Coding', monospace; white-space: nowrap; margin-right: 25px; color: #FFFFF0; opacity: 0.9; font-size: 14px; line-height: 1.8; }
+        .message-text { font-family: 'Nanum Gothic Coding', monospace; word-break: break-all; color: #FFFFF0; font-size: 18px; }
+        #input-wrapper { display: flex; flex-direction: row; align-items: center; width: 100%; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.2); }
+        #blinking-cursor { font-family: 'Nanum Gothic Coding', monospace; font-size: 18px; color: #FFFFF0; margin-right: 10px; font-weight: 700; }
+        #messageInput { flex-grow: 1; background: transparent; border: none; outline: none; font-size: 18px; font-family: 'Nanum Gothic Coding', monospace; font-weight: 700; color: #FFFFF0; padding: 0; margin: 0; }
+        #messageInput::placeholder { color: rgba(255, 255, 240, 0.5); }
+
+    </style>
+</head>
+<body>
+
+    <svg id="canvas-container" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="visualizer-layer"><canvas id="oscilloscope"></canvas></div>
+    <div id="nasa-image-layer"></div>
+    
+    <button id="startBtn">Start Visualizer</button>
+
+    <div id="content-layer">
+        <div id="messageLog"></div>
+        <div id="input-wrapper">
+            <span id="blinking-cursor">/</span>
+            <input type="text" id="messageInput" placeholder="Type your message and click Enter." autocomplete="off">
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            
+            // [초기화] 새로고침 시 모든 기록 삭제 (완전 새로 시작)
+            localStorage.removeItem('binaryLogData_v2');
+
+            // 전역 변수 설정 (비주얼라이저와 드래그 로직 공유용)
+            const VISUALIZER_SPACING = 350; 
+            const HITBOX_RADIUS = 180; // 삭제 인식 범위
+
+            /* =========================================
+               PART 0: NASA 이미지 시스템
+               (7개 동시, 15초 표시/15초 대기, 겹침 방지, 3곳 삭제존)
+               ========================================= */
+            const imageLayer = document.getElementById('nasa-image-layer');
+            const totalImages = 55; 
+            const batchSize = 7;    
+            const displayDuration = 15000; // 15초 표시
+            const gapDuration = 15000;     // 15초 대기
+            const cycleInterval = displayDuration + gapDuration; // 30초 주기
+
+            function spawnImageBatch() {
+                imageLayer.innerHTML = ''; // 초기화
+
+                const placedRects = []; 
+                const imgWidthVW = 7.5; 
+                const vwToPx = window.innerWidth / 100;
+                const imgSizePx = imgWidthVW * vwToPx * 1.5; 
+
+                for (let i = 0; i < batchSize; i++) {
+                    const randomIdx = Math.floor(Math.random() * totalImages) + 1;
+                    const img = document.createElement('img');
+                    img.src = `nasa${randomIdx}.jpg`;
+                    img.classList.add('nasa-popup-img');
+                    
+                    // 1. 겹침 방지 위치 계산
+                    let randomX, randomY;
+                    let overlapping = true;
+                    let attempts = 0;
+
+                    while (overlapping && attempts < 50) {
+                        randomX = Math.random() * (window.innerWidth - imgSizePx);
+                        randomY = Math.random() * (window.innerHeight - imgSizePx);
+                        
+                        overlapping = false;
+                        for (const rect of placedRects) {
+                            const dx = randomX - rect.x;
+                            const dy = randomY - rect.y;
+                            if (Math.sqrt(dx*dx + dy*dy) < imgSizePx) {
+                                overlapping = true;
+                                break;
+                            }
+                        }
+                        attempts++;
+                    }
+                    placedRects.push({x: randomX, y: randomY});
+
+                    img.style.left = `${randomX}px`;
+                    img.style.top = `${randomY}px`;
+                    const randomRotate = (Math.random() - 0.5) * 60;
+                    img.style.transform = `rotate(${randomRotate}deg)`;
+
+                    // 2. 드래그 기능 연결
+                    setupDragAndDrop(img);
+
+                    imageLayer.appendChild(img);
+                }
+
+                // 15초 후 사라짐
+                setTimeout(() => {
+                    const activeImages = document.querySelectorAll('.nasa-popup-img');
+                    activeImages.forEach(img => {
+                        if (!img.classList.contains('sucked-in')) {
+                            img.classList.add('fade-out');
+                        }
+                    });
+                    setTimeout(() => { imageLayer.innerHTML = ''; }, 1000);
+                }, displayDuration);
+            }
+
+            // [핵심] 드래그 앤 드롭 & 3개 영역 충돌 감지
+            function setupDragAndDrop(img) {
+                let isDragging = false;
+                let startX, startY, initialLeft, initialTop;
+
+                const onMouseDown = (e) => {
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    initialLeft = parseFloat(img.style.left || 0);
+                    initialTop = parseFloat(img.style.top || 0);
+                    
+                    // 드래그 시작 시 애니메이션 제거 & 최상단으로
+                    img.style.animation = 'none'; 
+                    img.style.transition = 'none';
+                    img.style.zIndex = 9999;
+                };
+
+                const onMouseMove = (e) => {
+                    if (!isDragging) return;
+                    e.preventDefault(); // 텍스트 선택 방지
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    img.style.left = `${initialLeft + dx}px`;
+                    img.style.top = `${initialTop + dy}px`;
+                };
+
+                const onMouseUp = (e) => {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    
+                    // 3개의 삭제 영역(블랙홀) 좌표 계산
+                    const cx = window.innerWidth / 2;
+                    const cy = window.innerHeight / 2;
+                    
+                    const targets = [
+                        { x: cx - VISUALIZER_SPACING, y: cy }, // 좌측 삼각형
+                        { x: cx, y: cy },                      // 중앙 삼각형
+                        { x: cx + VISUALIZER_SPACING, y: cy }  // 우측 삼각형
+                    ];
+
+                    // 이미지 중심 좌표
+                    const imgRect = img.getBoundingClientRect();
+                    const imgCenterX = imgRect.left + imgRect.width / 2;
+                    const imgCenterY = imgRect.top + imgRect.height / 2;
+
+                    let hitTarget = null;
+
+                    // 3개 영역 중 하나라도 닿았는지 확인
+                    for (const t of targets) {
+                        const dist = Math.sqrt(
+                            Math.pow(imgCenterX - t.x, 2) + 
+                            Math.pow(imgCenterY - t.y, 2)
+                        );
+                        if (dist < HITBOX_RADIUS) {
+                            hitTarget = t;
+                            break;
+                        }
+                    }
+
+                    if (hitTarget) {
+                        // [삭제 모션] 해당 삼각형으로 빨려들어감
+                        img.style.transition = 'all 0.5s ease-in';
+                        img.style.left = `${hitTarget.x - imgRect.width/2}px`;
+                        img.style.top = `${hitTarget.y - imgRect.height/2}px`;
+                        img.classList.add('sucked-in');
+                        
+                        setTimeout(() => { img.remove(); }, 500);
+                    } else {
+                        // [복귀] 허공에 놓으면 다시 부유 모션 시작
+                        img.style.animation = 'floatSpace 6s ease-in-out infinite alternate';
+                        img.style.transition = 'opacity 1s ease-in-out';
+                        img.style.zIndex = '';
+                    }
+                };
+
+                img.addEventListener('mousedown', onMouseDown);
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+            }
+
+            // 실행
+            spawnImageBatch();
+            setInterval(spawnImageBatch, cycleInterval);
+
+
+            /* =========================================
+               PART 1: 배경 아트워크 & 비주얼라이저
+               ========================================= */
+            const svg = document.getElementById('canvas-container');
+            const setCount = 20; const artRadius = 10; const duration = 6000;   
+            let artSets = [];
+            function easeInOutQuint(x) { return x < 0.5 ? 16 * x * x * x * x * x : 1 - Math.pow(-2 * x + 2, 5) / 2; }
+            class ArtSet {
+                constructor(svgContainer, width, height) {
+                    this.svg = svgContainer; this.width = width; this.height = height; this.ns = "http://www.w3.org/2000/svg";
+                    this.group = document.createElementNS(this.ns, "g"); this.group.classList.add("art-shape");
+                    this.line = document.createElementNS(this.ns, "line");
+                    this.circleTop = document.createElementNS(this.ns, "circle"); this.circleBottom = document.createElementNS(this.ns, "circle");
+                    this.circleTop.setAttribute("r", artRadius); this.circleBottom.setAttribute("r", artRadius);
+                    this.group.appendChild(this.line); this.group.appendChild(this.circleTop); this.group.appendChild(this.circleBottom);
+                    this.svg.appendChild(this.group); this.initPosition();
+                }
+                initPosition() {
+                    this.y1 = artRadius; this.y2 = this.height - artRadius;
+                    this.currX1 = Math.random() * (this.width - artRadius * 2) + artRadius;
+                    this.currX2 = Math.random() * (this.width - artRadius * 2) + artRadius;
+                    this.startX1 = this.currX1; this.startX2 = this.currX2;
+                    this.targetX1 = this.getRandomX(); this.targetX2 = this.getRandomX(); this.startTime = null;
+                }
+                getRandomX() { return Math.random() * (this.width - artRadius * 2) + artRadius; }
+                update(timestamp) {
+                    if (!this.startTime) this.startTime = timestamp;
+                    const elapsed = timestamp - this.startTime;
+                    let progress = Math.min(elapsed / duration, 1);
+                    const easedProgress = easeInOutQuint(progress);
+                    this.currX1 = this.startX1 + (this.targetX1 - this.startX1) * easedProgress;
+                    this.currX2 = this.startX2 + (this.targetX2 - this.startX2) * easedProgress;
+                    if (progress >= 1) { this.startTime = timestamp; this.startX1 = this.currX1; this.startX2 = this.currX2; this.targetX1 = this.getRandomX(); this.targetX2 = this.getRandomX(); }
+                    this.draw();
+                }
+                draw() {
+                    this.circleTop.setAttribute("cx", this.currX1); this.circleTop.setAttribute("cy", this.y1);
+                    this.circleBottom.setAttribute("cx", this.currX2); this.circleBottom.setAttribute("cy", this.y2);
+                    const angle = Math.atan2(this.y2 - this.y1, this.currX2 - this.currX1);
+                    this.line.setAttribute("x1", this.currX1 + artRadius * Math.cos(angle));
+                    this.line.setAttribute("y1", this.y1 + artRadius * Math.sin(angle));
+                    this.line.setAttribute("x2", this.currX2 - artRadius * Math.cos(angle));
+                    this.line.setAttribute("y2", this.y2 - artRadius * Math.sin(angle));
+                }
+            }
+            function initArt() {
+                svg.innerHTML = ''; artSets = [];
+                const width = window.innerWidth; const height = window.innerHeight;
+                for (let i = 0; i < setCount; i++) { const set = new ArtSet(svg, width, height); set.draw(); artSets.push(set); }
+                requestAnimationFrame(animateArt);
+            }
+            function animateArt(timestamp) { artSets.forEach(set => set.update(timestamp)); requestAnimationFrame(animateArt); }
+            initArt(); window.addEventListener('resize', initArt);
+
+            // 오디오 비주얼라이저
+            const canvas = document.getElementById('oscilloscope'); const ctx = canvas.getContext('2d');
+            const startBtn = document.getElementById('startBtn'); const resolution = 2;
+            function resizeCanvas() { canvas.width = window.innerWidth * resolution; canvas.height = window.innerHeight * resolution; ctx.scale(resolution, resolution); }
+            resizeCanvas(); window.addEventListener('resize', resizeCanvas);
+            let audioCtx, analyser, dataArray, bufferLength, isAudioRunning = false;
+
+            startBtn.addEventListener('click', async () => {
+                startBtn.style.display = 'none'; isAudioRunning = true;
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const source = audioCtx.createMediaStreamSource(stream);
+                    analyser = audioCtx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.85;
+                    source.connect(analyser); bufferLength = analyser.frequencyBinCount; dataArray = new Uint8Array(bufferLength);
+                    drawVisualizer();
+                } catch (err) { console.error(err); alert("마이크 권한이 필요합니다."); }
+            });
+
+            function getAverageVolume(array) {
+                let values = 0; for (let i = 0; i < array.length; i++) values += Math.abs(array[i] - 128);
+                return values / array.length;
+            }
+
+            function drawUniqueTriangle(centerX, centerY, radius, data, type) {
+                const avgVol = getAverageVolume(data);
+                let scale = 1.0 + (avgVol / 128) * (type === 1 ? 0.3 : (type === 0 ? 0.1 : 0.05));
+                ctx.save(); ctx.translate(centerX, centerY); ctx.scale(scale, scale); ctx.translate(-centerX, -centerY);
+                const vertices = [];
+                for(let k=0; k<3; k++) {
+                    const theta = -Math.PI / 2 + (k * 2 * Math.PI / 3);
+                    vertices.push({ x: centerX + radius * Math.cos(theta), y: centerY + radius * Math.sin(theta) });
+                }
+                ctx.beginPath();
+                const step = Math.ceil(bufferLength / 300);
+                for (let i = 0; i < bufferLength; i += step) {
+                    const t = i / bufferLength; const sideIndex = Math.floor(t * 3) % 3; const nextSideIndex = (sideIndex + 1) % 3; const segmentT = (t * 3) % 1;
+                    const p1 = vertices[sideIndex]; const p2 = vertices[nextSideIndex];
+                    const baseX = p1.x + (p2.x - p1.x) * segmentT; const baseY = p1.y + (p2.y - p1.y) * segmentT;
+                    let audioValue = 0;
+                    if (type === 0) audioValue = (data[i] / 128.0) - 1.0;
+                    else if (type === 1) audioValue = -((data[bufferLength - 1 - i] / 128.0) - 1.0) * 1.2;
+                    else audioValue = (data[(i * 2) % bufferLength] / 128.0) - 1.0;
+                    const displacement = audioValue * 60;
+                    const angle = Math.atan2(baseY - centerY, baseX - centerX);
+                    const fx = baseX + Math.cos(angle) * displacement; const fy = baseY + Math.sin(angle) * displacement;
+                    if (i === 0) ctx.moveTo(fx, fy); else ctx.lineTo(fx, fy);
+                }
+                ctx.closePath(); ctx.fillStyle = '#000000'; ctx.fill();
+                ctx.lineWidth = 20; ctx.strokeStyle = '#4a65eb'; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawVisualizer() {
+                if (!isAudioRunning) return;
+                requestAnimationFrame(drawVisualizer);
+                analyser.getByteTimeDomainData(dataArray);
+                ctx.clearRect(0, 0, canvas.width / resolution, canvas.height / resolution);
+                const cx = window.innerWidth / 2; const cy = window.innerHeight / 2;
+                const r = 150; 
+                const s = VISUALIZER_SPACING; // 전역 변수 사용
+                drawUniqueTriangle(cx - s, cy, r, dataArray, 0); drawUniqueTriangle(cx, cy, r, dataArray, 1); drawUniqueTriangle(cx + s, cy, r, dataArray, 2);
+            }
+
+            // 메시지 로그
+            const messageInput = document.getElementById('messageInput'); const messageLog = document.getElementById('messageLog'); const cursor = document.getElementById('blinking-cursor');
+            setInterval(() => { cursor.style.opacity = cursor.style.opacity === '0' ? '1' : '0'; }, 500);
+            function toBin(n) { return n.toString(2); }
+            function getBinaryDateTime() { const n = new Date(); return `${toBin(n.getFullYear())} ${toBin(n.getMonth()+1)} ${toBin(n.getDate())} ${toBin(n.getHours())} ${toBin(n.getMinutes())} ${toBin(n.getSeconds())}`; }
+            function renderMessage(t, txt) {
+                const d = document.createElement('div'); d.className = 'message-entry';
+                d.innerHTML = `<span class="binary-date">${t}</span><span class="message-text">${txt}</span>`;
+                messageLog.appendChild(d); window.scrollTo(0, document.body.scrollHeight);
+            }
+            
+            // 저장된 메시지 불러오기 (이미 삭제했지만 혹시 몰라 유지)
+            const saved = localStorage.getItem('binaryLogData_v2');
+            if(saved) JSON.parse(saved).forEach(m => renderMessage(m.time, m.text));
+            
+            messageInput.addEventListener('keydown', (e) => {
+                if(e.key === 'Enter' && messageInput.value.trim()) {
+                    const t = getBinaryDateTime(); const txt = messageInput.value.trim();
+                    renderMessage(t, txt);
+                    const msgs = saved ? JSON.parse(saved) : []; msgs.push({time:t, text:txt});
+                    localStorage.setItem('binaryLogData_v2', JSON.stringify(msgs));
+                    messageInput.value = '';
+                }
+            });
+            messageInput.focus();
+        });
+    </script>
+</body>
+</html>
