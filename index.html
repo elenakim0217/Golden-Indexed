@@ -11,7 +11,6 @@
     <link href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.1/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css" rel="stylesheet">
 
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-    <script src="https://w.soundcloud.com/player/api.js"></script>
 
     <style>
         :root {
@@ -27,14 +26,12 @@
             font-size: var(--base-font-size);
         }
 
-        /* [배경 아트워크] */
         #canvas-container {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 0; pointer-events: none;
         }
         .art-shape { stroke: rgba(255, 255, 255, 0.5); stroke-width: 1px; fill: none; will-change: transform; }
 
-        /* NASA 이미지 레이어 */
         #nasa-image-layer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 20; pointer-events: none;
@@ -57,7 +54,6 @@
             z-index: 99999 !important; transition: none !important; 
         }
 
-        /* 꼴라쥬 레이어 (클릭 통과) */
         #collage-layer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 10; 
@@ -84,7 +80,6 @@
             filter: brightness(10) blur(2px) !important; pointer-events: none; 
         }
 
-        /* 오디오 비주얼라이저 */
         #visualizer-layer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 5; pointer-events: none; 
@@ -92,7 +87,6 @@
         }
         canvas#oscilloscope { width: 100%; height: 100%; }
 
-        /* UI 요소들 */
         #startBtn {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             z-index: 30; padding: 15px 30px;
@@ -162,7 +156,6 @@
         }
         .hamburger-icon img { width: 100%; height: auto; display: block; transition: all 0.3s; }
 
-        /* 정보 팝업창 스타일 */
         #info-popup {
             display: none; 
             position: fixed; 
@@ -188,7 +181,6 @@
         .popup-title-text { font-family: 'Nanum Gothic Coding', monospace; font-size: 18px; color: var(--main-yellow); display: block; font-weight: bold; }
         .popup-title-img { max-height: 28px; width: auto; display: none; }
 
-        /* [2열 그리드] */
         .popup-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr); 
@@ -212,14 +204,9 @@
             font-size: 14px;
         }
 
-        /* [오디오 플레이어 숨김] */
-        .hidden-audio-player {
-            position: absolute;
-            top: -9999px;
-            left: -9999px;
-            visibility: hidden;
-            width: 1px;
-            height: 1px;
+        #soundcloud-container {
+            position: fixed; top: -9999px; left: -9999px; width: 1px; height: 1px;
+            opacity: 0; pointer-events: none;
         }
 
     </style>
@@ -232,18 +219,6 @@
     <div id="collage-layer"><canvas id="collage-canvas"></canvas></div>
     <div id="nasa-image-layer"></div>
     
-    <iframe id="bgm-player-default-1" class="hidden-audio-player" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" 
-        src="https://w.soundcloud.com/player/?url=https%3A//soundcloud.com/luval-306995646/luval-torsional-effect-space&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true">
-    </iframe>
-
-    <audio id="bgm-player-default-2" class="hidden-audio-player" src="voyager.mp3" preload="auto"></audio>
-
-    <iframe id="bgm-player-random" class="hidden-audio-player" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="about:blank"></iframe>
-
-    <audio id="sfx-message" class="hidden-audio-player" src="message.mp3" preload="auto"></audio>
-    <audio id="sfx-button" class="hidden-audio-player" src="button.mp3" preload="auto"></audio>
-
-
     <button id="startBtn">Click here to message with an alien!</button>
 
     <div id="content-layer">
@@ -257,8 +232,7 @@
                 <div id="rotating-text-area"></div>
                 <div id="help-msg-area">Randomly insert the images into 3 kinds of triangles for message input.</div>
                 
-                <div id="final-msg-area">Click here to remessage with aliens forever.</div>
-                
+                <div id="final-msg-area" onclick="playBtnSound(); setTimeout(() => location.reload(), 500)">Click here to remessage with aliens forever.</div>
                 <svg id="save-icon-btn" viewBox="0 0 24 24">
                     <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
                 </svg>
@@ -307,20 +281,52 @@
             </div>
         </div>
     </div>
+    
+    <div id="soundcloud-container"></div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            
-            // localStorage.removeItem('binaryLogData_v2'); 
+        const sfxBtn = new Audio('button.mp3');
+        const sfxMessage = new Audio('message.mp3');
+        const bgmList = ['space1.mp3', 'space2.mp3', 'voyager.mp3'];
+        let currentBgmIndex = 0;
+        let bgmAudio = new Audio();
+        let isCollageMode = false;
 
-            // [설정] 
+        function playBtnSound() {
+            sfxBtn.currentTime = 0; 
+            sfxBtn.play().catch(e => console.log('Sound play blocked:', e));
+        }
+
+        function playNextBgm() {
+            if (isCollageMode) return;
+            bgmAudio.src = bgmList[currentBgmIndex];
+            bgmAudio.play().catch(e => console.log('BGM play blocked:', e));
+            currentBgmIndex = (currentBgmIndex + 1) % bgmList.length;
+        }
+        
+        bgmAudio.addEventListener('ended', playNextBgm);
+
+        const soundCloudUrls = [
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669467051&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466991&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466895&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466811&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466721&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466583&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466466&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466421&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466322&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466304&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466262&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true"
+        ];
+
+        document.addEventListener("DOMContentLoaded", () => {
             const INITIAL_SPACING = 350; 
             const HITBOX_RADIUS = 160; 
             const MERGE_DURATION = 3200; 
             const IDLE_LIMIT = 15000; 
             const STORAGE_KEY = 'alien_comm_log_persistent';
 
-            // [상태 변수]
             let currentSpacing = INITIAL_SPACING; 
             let droppedImageCount = 0; 
             let isMerging = false; 
@@ -333,119 +339,9 @@
             let helpInterval;
             let hasInteracted = false; 
 
-            // [오디오 상태 변수 및 로직]
-            let defaultWidget; // Luval (SC)
-            let voyagerAudio;  // Voyager (HTML5 Audio)
-            let randomWidget;  // NASA (SC)
-            
-            let isCollageMode = false; // 꼴라쥬 모드 진입 여부
-            let isPopupOpen = false;   // 팝업 열림 여부
-            
-            // 0: Luval 재생 중, 1: Voyager 재생 중
-            let currentDefaultIndex = 0; 
-
-            // [추가] 효과음 재생용 함수
-            function playButtonSound() {
-                const sfx = document.getElementById('sfx-button');
-                if (sfx) {
-                    sfx.currentTime = 0; // 연타 시 처음부터 재생
-                    sfx.play().catch(e => console.log('Sound play blocked:', e));
-                }
-            }
-
-            // NASA 랜덤 트랙 소스
-            const randomTracks = [
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669467051&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466991&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466895&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466811&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466721&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466583&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466466&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466421&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466322&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466304&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
-                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466262&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true"
-            ];
-
-            function initAudioWidgets() {
-                const defaultIframe = document.getElementById('bgm-player-default-1'); // Luval
-                voyagerAudio = document.getElementById('bgm-player-default-2');        // Voyager
-                const randomIframe = document.getElementById('bgm-player-random');     // NASA
-                
-                defaultWidget = SC.Widget(defaultIframe);
-                randomWidget = SC.Widget(randomIframe);
-
-                // [로직] Luval(SC) 끝나면 -> Voyager(Audio) 재생
-                defaultWidget.bind(SC.Widget.Events.FINISH, function() {
-                    currentDefaultIndex = 1; 
-                    voyagerAudio.currentTime = 0;
-                    voyagerAudio.play();
-                });
-
-                // [로직] Voyager(Audio) 끝나면 -> Luval(SC) 재생
-                voyagerAudio.addEventListener('ended', function() {
-                    currentDefaultIndex = 0;
-                    defaultWidget.seekTo(0);
-                    defaultWidget.play();
-                });
-
-                // 랜덤 트랙 무한 반복 설정
-                randomWidget.bind(SC.Widget.Events.FINISH, function() {
-                    randomWidget.seekTo(0);
-                    randomWidget.play();
-                });
-            }
-
-            function updateAudioState() {
-                if (!audioOn) return; 
-
-                // [상황 B] 팝업 열림 OR 꼴라쥬 모드 -> 기본 트랙들 정지, 랜덤 NASA 재생
-                if (isPopupOpen || isCollageMode) {
-                    defaultWidget.pause();
-                    voyagerAudio.pause();
-
-                    randomWidget.isPaused(function(paused) {
-                        if (paused) {
-                            pickAndPlayRandomTrack();
-                        }
-                    });
-                } 
-                // [상황 A] 기본 화면 -> 랜덤 NASA 정지, 현재 순서의 기본 트랙 재생
-                else {
-                    randomWidget.pause();
-                    if (currentDefaultIndex === 0) {
-                        defaultWidget.play();
-                    } else {
-                        voyagerAudio.play();
-                    }
-                }
-            }
-
-            function pickAndPlayRandomTrack() {
-                const randomSrc = randomTracks[Math.floor(Math.random() * randomTracks.length)];
-                const randomIframe = document.getElementById('bgm-player-random');
-                
-                randomIframe.src = randomSrc;
-                randomIframe.onload = function() {
-                     randomWidget = SC.Widget(randomIframe);
-                     randomWidget.bind(SC.Widget.Events.READY, function() {
-                         randomWidget.play();
-                         randomWidget.bind(SC.Widget.Events.FINISH, function() {
-                            randomWidget.seekTo(0);
-                            randomWidget.play();
-                        });
-                     });
-                };
-            }
-            
-            initAudioWidgets();
-
-
             const txtArea = document.getElementById('rotating-text-area');
             const helpArea = document.getElementById('help-msg-area');
 
-            /* 1. 배경 아트워크 애니메이션 */
             const svgContainer = document.getElementById('canvas-container');
             const setArtCount = 20; const artRadius = 10; 
 
@@ -498,8 +394,6 @@
             function animateArt(t) { artSets.forEach(s => s.update(t)); requestAnimationFrame(animateArt); }
             initArt(); window.addEventListener('resize', initArt);
 
-
-            /* [유휴 감지] */
             function resetIdleTimer() {
                 if (hasInteracted || isMerging) return;
                 clearTimeout(idleTimeout);
@@ -538,8 +432,6 @@
             window.addEventListener('mousedown', resetIdleTimer);
             resetIdleTimer();
 
-
-            /* NASA 이미지 시스템 */
             const imageLayer = document.getElementById('nasa-image-layer');
             const totalImages = 55; 
             const batchSize = 7;    
@@ -589,7 +481,6 @@
                 });
             }
 
-            // [드래그 앤 드롭 로직]
             function setupDragAndDrop(img) {
                 let isDragging = false;
                 let dragOffsetX = 0;
@@ -639,6 +530,8 @@
                     }
 
                     if (hitTarget) {
+                        playBtnSound();
+
                         if (isHelpMode) endHelpMode();
                         hasInteracted = true; 
                         clearTimeout(idleTimeout);
@@ -672,8 +565,6 @@
             
             spawnImageBatch(); 
 
-
-            /* 비주얼라이저 */
             const canvas = document.getElementById('oscilloscope'); const ctx = canvas.getContext('2d');
             const startBtn = document.getElementById('startBtn'); const res = 2;
             function resizeC() { canvas.width = window.innerWidth * res; canvas.height = window.innerHeight * res; ctx.scale(res, res); }
@@ -681,15 +572,10 @@
             let actx, anl, dArray, bufLen, audioOn = false;
 
             startBtn.addEventListener('click', async () => {
-                // [수정] Start 버튼 효과음 재생
-                playButtonSound();
+                playBtnSound();
+                playNextBgm();
 
                 startBtn.style.display = 'none'; audioOn = true;
-                
-                // 오디오 시작 (기본 Luval - 인덱스 0번)
-                currentDefaultIndex = 0;
-                defaultWidget.play();
-
                 actx = new (window.AudioContext || window.webkitAudioContext)();
                 try {
                     const strm = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -818,8 +704,6 @@
                 ctx.restore();
             }
 
-
-            /* UI 및 텍스트 로직 */
             const msgIn = document.getElementById('messageInput'); 
             const msgLog = document.getElementById('messageLog'); 
             const cursor = document.getElementById('blinking-cursor');
@@ -853,13 +737,11 @@
 
             msgIn.addEventListener('keydown', (e) => {
                 if(e.key === 'Enter' && msgIn.value.trim()) {
-                    // [수정] 메시지 전송(Enter) 시 효과음 재생
-                    playButtonSound();
+                    playBtnSound();
                     addMsg(getBinTime(), msgIn.value.trim()); msgIn.value = '';
                 }
             });
 
-            /* 팝업 토글 로직 & 메뉴 아이콘 호버 효과 */
             const menuBtn = document.getElementById('menuBtn');
             const menuIconImg = document.getElementById('menu-icon-img'); 
             const infoPopup = document.getElementById('info-popup');
@@ -873,45 +755,22 @@
             });
 
             menuBtn.addEventListener('click', (e) => {
+                playBtnSound();
                 e.stopPropagation(); 
-                
-                // [수정] 메뉴 아이콘 클릭 시 효과음 재생
-                playButtonSound();
-
                 if (infoPopup.style.display === 'block') {
                     infoPopup.style.display = 'none';
-                    isPopupOpen = false; 
                 } else {
                     infoPopup.style.display = 'block';
                     menuIconImg.src = 'icon1.png';
-                    isPopupOpen = true; 
                 }
-                updateAudioState(); 
             });
 
             closeBtn.addEventListener('click', (e) => {
+                playBtnSound();
                 e.stopPropagation();
-
-                // [수정] 팝업 닫기 버튼 클릭 시 효과음 재생
-                playButtonSound();
-
                 infoPopup.style.display = 'none';
-                isPopupOpen = false; 
-                updateAudioState(); 
             });
 
-            /* [추가] 마지막 화면 리셋(Remessage) 버튼 클릭 처리 */
-            const finalMsgArea = document.getElementById('final-msg-area');
-            finalMsgArea.addEventListener('click', () => {
-                // 효과음 재생 후 새로고침 (소리 들을 시간 확보)
-                playButtonSound();
-                setTimeout(() => {
-                    location.reload();
-                }, 500);
-            });
-
-
-            /* 팝업 타이틀 애니메이션 */
             const titleText = document.getElementById('popup-text-title');
             const titleImg = document.getElementById('popup-img-title');
             let showTitleImg = false; 
@@ -926,7 +785,6 @@
                     titleImg.style.display = 'none';
                 }
             }, 5000);
-
 
             const texts = [
                 "Whatever happens in space, whatever the unknown fate,",
@@ -961,17 +819,13 @@
                 helpArea.style.display = 'none';
 
                 setTimeout(() => {
+                    sfxMessage.currentTime = 0;
+                    sfxMessage.play().catch(e => console.log('Message sound blocked:', e));
+
                     const specialMsg = "Ready to communicate with aliens. Typing a message...";
                     txtArea.innerText = specialMsg;
                     txtArea.style.color = "var(--main-yellow)"; 
                     txtArea.style.textDecoration = "none";
-
-                    // [수정] 텍스트가 뜰 때 message.mp3 1회 재생
-                    const msgSound = document.getElementById('sfx-message');
-                    if (msgSound) {
-                        msgSound.currentTime = 0;
-                        msgSound.play().catch(e => console.log('Message sound blocked:', e));
-                    }
 
                     let blinkState = true;
                     txtArea.style.opacity = '1';
@@ -992,8 +846,6 @@
                 }, 1000);
             }
 
-
-            /* 파티클 꼴라쥬 시스템 */
             let pCanvas, pCtx;
             let particles = [];
             const GAP = 4; 
@@ -1058,9 +910,15 @@
             }
 
             function initCollageParticles() {
-                // 꼴라쥬 모드 진입: 오디오 상태 업데이트
                 isCollageMode = true;
-                updateAudioState();
+                bgmAudio.pause();
+
+                const scContainer = document.getElementById('soundcloud-container');
+                const randomUrl = soundCloudUrls[Math.floor(Math.random() * soundCloudUrls.length)];
+                const autoPlayUrl = randomUrl.replace('auto_play=false', 'auto_play=true');
+                
+                scContainer.innerHTML = `<iframe width="100%" height="300" scrolling="no" frameborder="no" allow="autoplay" src="${autoPlayUrl}"></iframe>`;
+
 
                 document.getElementById('visualizer-layer').style.display = 'none';
                 document.getElementById('collage-layer').style.display = 'block';
@@ -1092,13 +950,14 @@
 
                 for(let r=0; r<3; r++) { 
                     const imgs = droppedImages[r];
+                    if (imgs.length === 0) continue; 
                     const startX = (window.innerWidth - (imgs.length * imgSize)) / 2;
 
                     imgs.forEach((src, idx) => {
                         const p = new Promise((resolve) => {
                             const img = new Image();
-                            img.crossOrigin = "Anonymous"; 
                             img.src = src;
+                            
                             img.onload = () => {
                                 const tmpC = document.createElement('canvas');
                                 tmpC.width = imgSize; tmpC.height = imgSize;
@@ -1107,16 +966,17 @@
                                 
                                 try {
                                     const data = tmpCtx.getImageData(0, 0, imgSize, imgSize).data;
+                                    
                                     let mode;
                                     if(r === 0) mode = Math.floor(Math.random() * 3) + 1; 
                                     else if(r === 1) mode = Math.floor(Math.random() * 3) + 4; 
                                     else mode = Math.floor(Math.random() * 4) + 7; 
 
-                                    let baseDrawX = startX + idx * (imgSize - 20);
+                                    let baseDrawX = startX + idx * (imgSize - 50);
                                     let baseDrawY = rowHeights[r] - imgSize/2;
 
-                                    const randomShiftX = (Math.random() - 0.5) * 120; 
-                                    const randomShiftY = (Math.random() - 0.5) * 80;
+                                    const randomShiftX = (Math.random() - 0.5) * 50; 
+                                    const randomShiftY = (Math.random() - 0.5) * 50;
 
                                     const drawX = baseDrawX + randomShiftX;
                                     const drawY = baseDrawY + randomShiftY;
@@ -1131,18 +991,29 @@
                                             }
                                         }
                                     }
-                                } catch(e) { console.warn(e); }
+                                } catch(e) { 
+                                    console.warn("캔버스 보안 오류: 로컬 서버(Live Server)에서 실행해주세요.", e); 
+                                }
                                 resolve();
                             };
-                            img.onerror = resolve; 
+                            img.onerror = () => {
+                                console.warn("이미지 로드 실패:", src);
+                                resolve(); 
+                            };
                         });
                         promises.push(p);
                     });
                 }
 
-                Promise.all(promises).then(() => { animateCollage(); });
+                Promise.all(promises).then(() => { 
+                    if(particles.length === 0) {
+                        alert("보안 문제로 파티클을 생성할 수 없습니다. 파일을 서버 환경(Live Server 등)에서 실행해주세요.");
+                    }
+                    animateCollage(); 
+                });
 
                 saveIcon.addEventListener('click', () => {
+                    playBtnSound();
                     const contentLayer = document.getElementById('content-layer');
                     const startBtn = document.getElementById('startBtn');
                     const infoPopup = document.getElementById('info-popup');
@@ -1159,7 +1030,10 @@
                         link.download = 'golden_message.jpg';
                         link.href = canvas.toDataURL('image/jpeg');
                         link.click();
-                    }).catch(err => { alert("캡쳐 오류 발생"); }).finally(() => { contentLayer.style.display = 'flex'; });
+                    }).catch(err => { 
+                        console.error(err);
+                        alert("캡쳐 오류 발생"); 
+                    }).finally(() => { contentLayer.style.display = 'flex'; });
                 });
             }
 
