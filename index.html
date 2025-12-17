@@ -11,6 +11,7 @@
     <link href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.1/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css" rel="stylesheet">
 
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://w.soundcloud.com/player/api.js"></script>
 
     <style>
         :root {
@@ -211,6 +212,16 @@
             font-size: 14px;
         }
 
+        /* [오디오 플레이어 숨김] */
+        .hidden-audio-player {
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            visibility: hidden;
+            width: 1px;
+            height: 1px;
+        }
+
     </style>
 </head>
 <body>
@@ -221,6 +232,12 @@
     <div id="collage-layer"><canvas id="collage-canvas"></canvas></div>
     <div id="nasa-image-layer"></div>
     
+    <iframe id="bgm-player-default" class="hidden-audio-player" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" 
+        src="https://w.soundcloud.com/player/?url=https%3A//soundcloud.com/luval-306995646/luval-torsional-effect-space&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true&loop=true">
+    </iframe>
+
+    <iframe id="bgm-player-random" class="hidden-audio-player" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="about:blank"></iframe>
+
     <button id="startBtn">Click here to message with an alien!</button>
 
     <div id="content-layer">
@@ -308,6 +325,91 @@
             let isHelpMode = false;
             let helpInterval;
             let hasInteracted = false; 
+
+            // [오디오 상태 변수 및 로직]
+            let defaultWidget, randomWidget;
+            let isCollageMode = false; // 꼴라쥬 모드 진입 여부
+            let isPopupOpen = false;   // 팝업 열림 여부
+            
+            // NASA 랜덤 트랙 소스 (iframe src에서 추출)
+            const randomTracks = [
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669467051&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466991&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466895&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466811&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466721&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466583&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466466&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466421&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466322&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466304&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466262&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true"
+            ];
+
+            function initAudioWidgets() {
+                const defaultIframe = document.getElementById('bgm-player-default');
+                const randomIframe = document.getElementById('bgm-player-random');
+                
+                defaultWidget = SC.Widget(defaultIframe);
+                randomWidget = SC.Widget(randomIframe);
+
+                // 기본 트랙 무한 반복 설정
+                defaultWidget.bind(SC.Widget.Events.FINISH, function() {
+                    defaultWidget.seekTo(0);
+                    defaultWidget.play();
+                });
+
+                // 랜덤 트랙 무한 반복 설정
+                randomWidget.bind(SC.Widget.Events.FINISH, function() {
+                    randomWidget.seekTo(0);
+                    randomWidget.play();
+                });
+            }
+
+            function updateAudioState() {
+                if (!audioOn) return; // 시작 버튼 누르기 전엔 재생 안 함
+
+                // [조건] 팝업이 열려 있거나, 꼴라쥬 모드라면 -> 랜덤 트랙 재생 (기본 트랙 정지)
+                if (isPopupOpen || isCollageMode) {
+                    defaultWidget.pause();
+                    // 이미 랜덤 트랙이 재생 중이 아니라면 새로 선택해서 재생
+                    randomWidget.isPaused(function(paused) {
+                        if (paused) {
+                            pickAndPlayRandomTrack();
+                        }
+                    });
+                } 
+                // [조건] 그 외 (기본 화면) -> 기본 트랙 재생 (랜덤 트랙 정지)
+                else {
+                    randomWidget.pause();
+                    defaultWidget.play();
+                }
+            }
+
+            function pickAndPlayRandomTrack() {
+                const randomSrc = randomTracks[Math.floor(Math.random() * randomTracks.length)];
+                const randomIframe = document.getElementById('bgm-player-random');
+                
+                // src 변경 후 위젯 다시 로드 및 재생
+                randomIframe.src = randomSrc;
+                
+                // iframe src 로딩 시간을 고려하여 약간의 딜레이 후 재생 시도 또는 onload 이벤트 활용
+                randomIframe.onload = function() {
+                     randomWidget = SC.Widget(randomIframe); // 위젯 재연결
+                     randomWidget.bind(SC.Widget.Events.READY, function() {
+                         randomWidget.play();
+                         // 랜덤 트랙 루프 다시 바인딩 (src 변경 시 초기화될 수 있음)
+                         randomWidget.bind(SC.Widget.Events.FINISH, function() {
+                            randomWidget.seekTo(0);
+                            randomWidget.play();
+                        });
+                     });
+                };
+            }
+            
+            // 초기화
+            initAudioWidgets();
+
 
             const txtArea = document.getElementById('rotating-text-area');
             const helpArea = document.getElementById('help-msg-area');
@@ -549,6 +651,10 @@
 
             startBtn.addEventListener('click', async () => {
                 startBtn.style.display = 'none'; audioOn = true;
+                
+                // 오디오 시작 (기본 Luval 트랙 재생)
+                defaultWidget.play();
+
                 actx = new (window.AudioContext || window.webkitAudioContext)();
                 try {
                     const strm = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -733,15 +839,20 @@
                 e.stopPropagation(); 
                 if (infoPopup.style.display === 'block') {
                     infoPopup.style.display = 'none';
+                    isPopupOpen = false; // 팝업 상태 업데이트
                 } else {
                     infoPopup.style.display = 'block';
                     menuIconImg.src = 'icon1.png';
+                    isPopupOpen = true; // 팝업 상태 업데이트
                 }
+                updateAudioState(); // 오디오 상태 갱신
             });
 
             closeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 infoPopup.style.display = 'none';
+                isPopupOpen = false; // 팝업 상태 업데이트
+                updateAudioState(); // 오디오 상태 갱신
             });
 
             /* 팝업 타이틀 애니메이션 */
@@ -884,6 +995,10 @@
             }
 
             function initCollageParticles() {
+                // 꼴라쥬 모드 진입: 오디오 상태 업데이트
+                isCollageMode = true;
+                updateAudioState();
+
                 document.getElementById('visualizer-layer').style.display = 'none';
                 document.getElementById('collage-layer').style.display = 'block';
                 
