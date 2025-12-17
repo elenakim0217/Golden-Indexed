@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Golden Indexed 2.0 - Final Interaction</title>
+    <title>Golden Indexed</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -232,11 +232,17 @@
     <div id="collage-layer"><canvas id="collage-canvas"></canvas></div>
     <div id="nasa-image-layer"></div>
     
-    <iframe id="bgm-player-default" class="hidden-audio-player" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" 
-        src="https://w.soundcloud.com/player/?url=https%3A//soundcloud.com/luval-306995646/luval-torsional-effect-space&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true&loop=true">
+    <iframe id="bgm-player-default-1" class="hidden-audio-player" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" 
+        src="https://w.soundcloud.com/player/?url=https%3A//soundcloud.com/luval-306995646/luval-torsional-effect-space&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true">
     </iframe>
 
+    <audio id="bgm-player-default-2" class="hidden-audio-player" src="voyager.mp3" preload="auto"></audio>
+
     <iframe id="bgm-player-random" class="hidden-audio-player" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="about:blank"></iframe>
+
+    <audio id="sfx-message" class="hidden-audio-player" src="message.mp3" preload="auto"></audio>
+    <audio id="sfx-button" class="hidden-audio-player" src="button.mp3" preload="auto"></audio>
+
 
     <button id="startBtn">Click here to message with an alien!</button>
 
@@ -251,7 +257,8 @@
                 <div id="rotating-text-area"></div>
                 <div id="help-msg-area">Randomly insert the images into 3 kinds of triangles for message input.</div>
                 
-                <div id="final-msg-area" onclick="location.reload()">Click here to remessage with aliens forever.</div>
+                <div id="final-msg-area">Click here to remessage with aliens forever.</div>
+                
                 <svg id="save-icon-btn" viewBox="0 0 24 24">
                     <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
                 </svg>
@@ -327,11 +334,26 @@
             let hasInteracted = false; 
 
             // [오디오 상태 변수 및 로직]
-            let defaultWidget, randomWidget;
+            let defaultWidget; // Luval (SC)
+            let voyagerAudio;  // Voyager (HTML5 Audio)
+            let randomWidget;  // NASA (SC)
+            
             let isCollageMode = false; // 꼴라쥬 모드 진입 여부
             let isPopupOpen = false;   // 팝업 열림 여부
             
-            // NASA 랜덤 트랙 소스 (iframe src에서 추출)
+            // 0: Luval 재생 중, 1: Voyager 재생 중
+            let currentDefaultIndex = 0; 
+
+            // [추가] 효과음 재생용 함수
+            function playButtonSound() {
+                const sfx = document.getElementById('sfx-button');
+                if (sfx) {
+                    sfx.currentTime = 0; // 연타 시 처음부터 재생
+                    sfx.play().catch(e => console.log('Sound play blocked:', e));
+                }
+            }
+
+            // NASA 랜덤 트랙 소스
             const randomTracks = [
                 "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669467051&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
                 "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A1669466991&color=%23ff5500&auto_play=true&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true",
@@ -347,14 +369,23 @@
             ];
 
             function initAudioWidgets() {
-                const defaultIframe = document.getElementById('bgm-player-default');
-                const randomIframe = document.getElementById('bgm-player-random');
+                const defaultIframe = document.getElementById('bgm-player-default-1'); // Luval
+                voyagerAudio = document.getElementById('bgm-player-default-2');        // Voyager
+                const randomIframe = document.getElementById('bgm-player-random');     // NASA
                 
                 defaultWidget = SC.Widget(defaultIframe);
                 randomWidget = SC.Widget(randomIframe);
 
-                // 기본 트랙 무한 반복 설정
+                // [로직] Luval(SC) 끝나면 -> Voyager(Audio) 재생
                 defaultWidget.bind(SC.Widget.Events.FINISH, function() {
+                    currentDefaultIndex = 1; 
+                    voyagerAudio.currentTime = 0;
+                    voyagerAudio.play();
+                });
+
+                // [로직] Voyager(Audio) 끝나면 -> Luval(SC) 재생
+                voyagerAudio.addEventListener('ended', function() {
+                    currentDefaultIndex = 0;
                     defaultWidget.seekTo(0);
                     defaultWidget.play();
                 });
@@ -367,22 +398,27 @@
             }
 
             function updateAudioState() {
-                if (!audioOn) return; // 시작 버튼 누르기 전엔 재생 안 함
+                if (!audioOn) return; 
 
-                // [조건] 팝업이 열려 있거나, 꼴라쥬 모드라면 -> 랜덤 트랙 재생 (기본 트랙 정지)
+                // [상황 B] 팝업 열림 OR 꼴라쥬 모드 -> 기본 트랙들 정지, 랜덤 NASA 재생
                 if (isPopupOpen || isCollageMode) {
                     defaultWidget.pause();
-                    // 이미 랜덤 트랙이 재생 중이 아니라면 새로 선택해서 재생
+                    voyagerAudio.pause();
+
                     randomWidget.isPaused(function(paused) {
                         if (paused) {
                             pickAndPlayRandomTrack();
                         }
                     });
                 } 
-                // [조건] 그 외 (기본 화면) -> 기본 트랙 재생 (랜덤 트랙 정지)
+                // [상황 A] 기본 화면 -> 랜덤 NASA 정지, 현재 순서의 기본 트랙 재생
                 else {
                     randomWidget.pause();
-                    defaultWidget.play();
+                    if (currentDefaultIndex === 0) {
+                        defaultWidget.play();
+                    } else {
+                        voyagerAudio.play();
+                    }
                 }
             }
 
@@ -390,15 +426,11 @@
                 const randomSrc = randomTracks[Math.floor(Math.random() * randomTracks.length)];
                 const randomIframe = document.getElementById('bgm-player-random');
                 
-                // src 변경 후 위젯 다시 로드 및 재생
                 randomIframe.src = randomSrc;
-                
-                // iframe src 로딩 시간을 고려하여 약간의 딜레이 후 재생 시도 또는 onload 이벤트 활용
                 randomIframe.onload = function() {
-                     randomWidget = SC.Widget(randomIframe); // 위젯 재연결
+                     randomWidget = SC.Widget(randomIframe);
                      randomWidget.bind(SC.Widget.Events.READY, function() {
                          randomWidget.play();
-                         // 랜덤 트랙 루프 다시 바인딩 (src 변경 시 초기화될 수 있음)
                          randomWidget.bind(SC.Widget.Events.FINISH, function() {
                             randomWidget.seekTo(0);
                             randomWidget.play();
@@ -407,7 +439,6 @@
                 };
             }
             
-            // 초기화
             initAudioWidgets();
 
 
@@ -650,9 +681,13 @@
             let actx, anl, dArray, bufLen, audioOn = false;
 
             startBtn.addEventListener('click', async () => {
+                // [수정] Start 버튼 효과음 재생
+                playButtonSound();
+
                 startBtn.style.display = 'none'; audioOn = true;
                 
-                // 오디오 시작 (기본 Luval 트랙 재생)
+                // 오디오 시작 (기본 Luval - 인덱스 0번)
+                currentDefaultIndex = 0;
                 defaultWidget.play();
 
                 actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -818,6 +853,8 @@
 
             msgIn.addEventListener('keydown', (e) => {
                 if(e.key === 'Enter' && msgIn.value.trim()) {
+                    // [수정] 메시지 전송(Enter) 시 효과음 재생
+                    playButtonSound();
                     addMsg(getBinTime(), msgIn.value.trim()); msgIn.value = '';
                 }
             });
@@ -837,23 +874,42 @@
 
             menuBtn.addEventListener('click', (e) => {
                 e.stopPropagation(); 
+                
+                // [수정] 메뉴 아이콘 클릭 시 효과음 재생
+                playButtonSound();
+
                 if (infoPopup.style.display === 'block') {
                     infoPopup.style.display = 'none';
-                    isPopupOpen = false; // 팝업 상태 업데이트
+                    isPopupOpen = false; 
                 } else {
                     infoPopup.style.display = 'block';
                     menuIconImg.src = 'icon1.png';
-                    isPopupOpen = true; // 팝업 상태 업데이트
+                    isPopupOpen = true; 
                 }
-                updateAudioState(); // 오디오 상태 갱신
+                updateAudioState(); 
             });
 
             closeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
+
+                // [수정] 팝업 닫기 버튼 클릭 시 효과음 재생
+                playButtonSound();
+
                 infoPopup.style.display = 'none';
-                isPopupOpen = false; // 팝업 상태 업데이트
-                updateAudioState(); // 오디오 상태 갱신
+                isPopupOpen = false; 
+                updateAudioState(); 
             });
+
+            /* [추가] 마지막 화면 리셋(Remessage) 버튼 클릭 처리 */
+            const finalMsgArea = document.getElementById('final-msg-area');
+            finalMsgArea.addEventListener('click', () => {
+                // 효과음 재생 후 새로고침 (소리 들을 시간 확보)
+                playButtonSound();
+                setTimeout(() => {
+                    location.reload();
+                }, 500);
+            });
+
 
             /* 팝업 타이틀 애니메이션 */
             const titleText = document.getElementById('popup-text-title');
@@ -909,6 +965,13 @@
                     txtArea.innerText = specialMsg;
                     txtArea.style.color = "var(--main-yellow)"; 
                     txtArea.style.textDecoration = "none";
+
+                    // [수정] 텍스트가 뜰 때 message.mp3 1회 재생
+                    const msgSound = document.getElementById('sfx-message');
+                    if (msgSound) {
+                        msgSound.currentTime = 0;
+                        msgSound.play().catch(e => console.log('Message sound blocked:', e));
+                    }
 
                     let blinkState = true;
                     txtArea.style.opacity = '1';
@@ -1029,7 +1092,6 @@
 
                 for(let r=0; r<3; r++) { 
                     const imgs = droppedImages[r];
-                    // [수정] 랜덤 겹침(Overlap) 위치 계산
                     const startX = (window.innerWidth - (imgs.length * imgSize)) / 2;
 
                     imgs.forEach((src, idx) => {
